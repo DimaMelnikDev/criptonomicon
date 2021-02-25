@@ -1,5 +1,14 @@
 <template>
   <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
+    
+    <div v-if="spinner" class="fixed w-100 h-100 opacity-80 bg-purple-800 inset-0 z-50 flex items-center justify-center">
+      <svg class="animate-spin -ml-1 mr-3 h-12 w-12 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+    </div>
+
+
     <div class="container">
       <div class="w-full my-4"></div>
       <section>
@@ -11,18 +20,25 @@
             <div class="mt-1 relative rounded-md shadow-md">
               <input
                 v-model="tiker"
-                v-on:keydown.enter="add"
+                v-on:keydown.enter="add(tiker)"
                 type="text"
                 name="wallet"
                 id="wallet"
                 class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
                 placeholder="Например DOGE"
               />
+               <div v-if="searchHandler !== null" class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap">
+                  <span v-for="(valueTik, index) in searchHandler" :key="index" v-on:click="add(valueTik)" class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
+                    {{valueTik}}
+                  </span>
+              </div>
+              <div v-if="massageTik" class="text-sm text-red-600">Такой тикер уже добавлен</div>
+              
             </div>
           </div>
         </div>
         <button
-          v-on:click="add"
+          v-on:click="add(tiker)"
           type="button"
           class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
         >
@@ -141,30 +157,57 @@ export default {
   name: "App",
   data() {
     return {
+      spinner: true,
       tiker: "",
+      massageTik: false,
       tikers: [],
       sel: null,
-      graph: []
+      graph: [],
+      coinlist: [],
+                        
     };
   },
+  async mounted(){
+      const res = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?summary=true`);
+        const data = await res.json();
+        res.ok ? this.spinner = false : this.spinner = true
+        for(let key in data.Data) {
+            this.coinlist.push(data.Data[key]["Symbol"])
+        }
+        // console.log(this.coinlist)
+        
+  },
+
+  computed:{
+    searchHandler(){
+      if(this.tiker !== ''){
+        return this.coinlist.filter(elem => {
+          return elem.includes(this.tiker.toUpperCase()) //Дичь
+        }).reverse().splice(1,4) 
+      }else{
+        return null
+      }
+    }
+  },
+
   methods: {
-    add() {
+
+    add(valueTik) {
+
+      this.tiker = valueTik
+
       const currentTiker = {
         name: this.tiker,
         price: "-"
       };
 
-      this.tikers.push(currentTiker);
+      this.tikers.push(currentTiker)
 
       setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${currentTiker.name}&tsyms=USD&api_key=5a766503f4a0184a39e3ec96e773b0a190bcb991508e1bc29e47a7803799625a`
-        );
-
+        const f = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${currentTiker.name}&tsyms=USD&api_key=5a766503f4a0184a39e3ec96e773b0a190bcb991508e1bc29e47a7803799625a`);
         const data = await f.json();
 
-        this.tikers.find(t => t.name === currentTiker.name).price =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+        this.tikers.find(t => t.name === currentTiker.name).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
 
         if (this.sel?.name === currentTiker.name) {
           this.graph.push(data.USD);
@@ -173,9 +216,11 @@ export default {
 
       this.tiker = "";
     },
+
     remuveTiket(tik) {
       this.tikers = this.tikers.filter(t => t !== tik);
     },
+
     normalizeGraph() {
       const maxValue = Math.max(...this.graph);
       const minValue = Math.min(...this.graph);
@@ -183,11 +228,13 @@ export default {
         price => 5 + ((price - minValue) * 95) / (maxValue - minValue)
       );
     },
+
     select(tik) {
       this.sel = tik;
       this.graph = [];
     }
   }
+  
 };
 </script>
 
