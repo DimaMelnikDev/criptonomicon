@@ -159,27 +159,37 @@ export default {
     return {
       spinner: true,
       tiker: "",
+      sel: null,
       massageTik: false,
       tikers: [],
-      sel: null,
       graph: [],
-      coinlist: [],
-                        
-    };
+      coinlist: [],               
+    }
   },
   async mounted(){
-      const res = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?summary=true`);
-        const data = await res.json();
-        res.ok ? this.spinner = false : this.spinner = true
-        for(let key in data.Data) {
-            this.coinlist.push(data.Data[key]["Symbol"])
-        }
-        // console.log(this.coinlist)
-        
+      //...geting list coin #start
+      const res = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?summary=true`)
+      const data = await res.json()
+      if(res.ok){
+        this.spinner = false
+      }
+      for(let key in data.Data) {
+          this.coinlist.push(data.Data[key]["Symbol"])
+      }
+      //...geting list coin #end
   },
-
+  created() { 
+    //...loading tickers from localStorage #start
+    const tickersData = localStorage.getItem('cryptonamicon-list')
+    if(tickersData){
+      this.tikers = JSON.parse(tickersData)
+      this.tikers.forEach(elem => this.subscribeToUpdates(elem.name))
+    }
+    //...loading tickers from localStorage #end
+  },
   computed:{
-    searchHandler(){
+    //...Autocomplete #start
+    searchHandler(){ 
       if(this.tiker !== ''){
         return this.coinlist.filter(elem => {
           return elem.includes(this.tiker.toUpperCase()) //Дичь
@@ -188,32 +198,32 @@ export default {
         return null
       }
     }
+    //...Autocomplete #end
+  
   },
 
   methods: {
 
+    subscribeToUpdates(tickerName){
+      setInterval(async () => {
+        const f = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=5a766503f4a0184a39e3ec96e773b0a190bcb991508e1bc29e47a7803799625a`)
+        const data = await f.json()
+        this.tikers.find(t => t.name === tickerName).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2)
+        if (this.sel?.name === tickerName) {
+          this.graph.push(data.USD)
+        }
+      }, 5000)
+    },
+
     add(valueTik) {
-
       this.tiker = valueTik
-
       const currentTiker = {
         name: this.tiker,
         price: "-"
-      };
-
+      }
       this.tikers.push(currentTiker)
-
-      setInterval(async () => {
-        const f = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${currentTiker.name}&tsyms=USD&api_key=5a766503f4a0184a39e3ec96e773b0a190bcb991508e1bc29e47a7803799625a`);
-        const data = await f.json();
-
-        this.tikers.find(t => t.name === currentTiker.name).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-
-        if (this.sel?.name === currentTiker.name) {
-          this.graph.push(data.USD);
-        }
-      }, 5000);
-
+      localStorage.setItem('cryptonamicon-list', JSON.stringify(this.tikers)) //...adding tickers to localStorage 
+      this.subscribeToUpdates(currentTiker.name)
       this.tiker = "";
     },
 
