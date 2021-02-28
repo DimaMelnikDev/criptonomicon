@@ -12,11 +12,11 @@
         <div class="flex">
           <div class="max-w-xs">
             <label for="wallet" class="block text-sm font-medium text-gray-700"
-              >Тикер {{ tiker }}</label
+              >Тикер {{ ticker }}</label
             >
             <div class="mt-1 relative rounded-md shadow-md">
               <input
-                v-model.trim="tiker"
+                v-model.trim="ticker"
                 v-on:keydown.enter="add"
                 type="text"
                 name="wallet"
@@ -26,7 +26,7 @@
                 autocomplete="off"
               />
                <div v-if="searchHandler !== null" class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap">
-                  <span v-for="(valueTik, index) in searchHandler" :key="index" v-on:click="updatedDataTiker(valueTik)" class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
+                  <span v-for="(valueTik, index) in searchHandler" :key="index" v-on:click="updatedDataTicker(valueTik)" class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
                     {{valueTik}}
                   </span>
               </div>
@@ -56,7 +56,7 @@
           Добавить
         </button>
       </section>
-      <template v-if="tikers.length">
+      <template v-if="tickers.length">
         <hr class="w-full border-t border-gray-300 my-4" />
         <div>
           <button v-if="page > 1" v-on:click="page = page - 1" class="mx-2 my-1 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">Назад</button>
@@ -67,26 +67,26 @@
         <hr class="w-full border-t border-gray-300 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="(tik, idx) in filteredTikers()"
+            v-for="(ticker, idx) in paginatedTickers"
             v-bind:key="idx"
-            v-on:click="select(tik)"
+            v-on:click="select(ticker)"
             :class="{
-              'border-4 border-purple-700': sel === tik
+              'border-4 border-purple-700': selectedTicker === ticker
             }"
             class="bg-white overflow-hidden shadow rounded-lg border-p cursor-pointer"
           >
             <div class="px-4 py-5 sm:p-6 text-center">
               <dt class="text-sm font-medium text-gray-500 truncate">
-                {{ tik.name }} - USD
+                {{ ticker.name }} - USD
               </dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
-                {{ tik.price }}
+                {{ ticker.price }}
               </dd>
             </div>
 
             <div class="w-full border-t border-gray-200"></div>
             <button
-              @click.stop="remuveTiket(tik)"
+              @click.stop="handleDelete(ticker)"
               class="flex items-center justify-center font-medium w-full bg-gray-100 px-4 py-4 sm:px-6 text-md text-gray-500 hover:text-gray-600 hover:bg-gray-200 hover:opacity-20 transition-all focus:outline-none"
             >
             <svg
@@ -108,22 +108,21 @@
         <hr class="w-full border-t border-gray-600 my-4" />
       </template>
 
-      <section v-if="sel" class="relative">
+      <section v-if="selectedTicker" class="relative">
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
-          {{ sel.name }} - USD
+          {{ selectedTicker.name }} - USD
         </h3>
-
+        
         <div class="flex items-end border-gray-600 border-b border-l h-64">
           <div
-            v-for="(bar, idx) in normalizeGraph()"
-            :key="idx"
-            :style="{ height: `${bar}%` }"
+            v-for="(value, index)  in normalizedGraph"
+            :key="index"
+            :style="{ height: `${value}%` }"
             class="bg-purple-800 border w-10"
           ></div>
         </div>
-
         <button
-          @click="sel = null"
+          @click="selectedTicker = null"
           type="button"
           class="absolute top-0 right-0"
         >
@@ -153,38 +152,86 @@
     </div>
   </div>
 </template>
+// [ ] 6. Наличие в состоянии ЗАВИСИМЫХ ДАННЫХ | Критичность: 5+
+// [ ] 4. Запросы напрямую внутри компонента (???) | Критичность: 5
+// [ ] 2. При удалении остается подписка на загрузку тикера | Критичность: 5
+// [ ] 5. Обработка ошибок API | Критичность: 5
+// [ ] 3. Количество запросов | Критичность: 4
+// [ ] 8. При удалении тикера не изменяется localStorage | Критичность: 4
+// [ ] 1. Одинаковый код в watch | Критичность: 3
+// [ ] 9. localStorage и анонимные вкладки | Критичность: 3
+// [ ] 7. График ужасно выглядит если будет много цен | Критичность: 2
+// [ ] 10. Магические строки и числа (URL, 5000 миллисекунд задержки, ключ локал стораджа, количество на странице) |  Критичность: 1
+
+// Параллельно
+// [x] График сломан если везде одинаковые значения
+// [ ] При удалении тикера остается выбор
 
 <script>
 export default {
   name: "App",
   data() {
     return {
-      spinner: true,
-      tiker: "",
-      sel: null,
       filter: '',
+      ticker: "",
+      selectedTicker: null,
+      spinner: true,
       page: 1,
-      hasNextPage: false,
       massageTik: false,
-      tikers: [],
-      graph: [],
       coinlist: [],               
+      tickers: [],
+      graph: [],
     }
   },
   
   computed: {
+
     //...Autocomplete #start
     searchHandler(){ 
-      if(this.tiker !== ''){
+      if(this.ticker !== ''){
         return this.coinlist.filter(elem => {
-          return elem.includes(this.tiker.toUpperCase()) //Дичь
+          return elem.includes(this.ticker.toUpperCase()) //Дичь
         }).reverse().splice(1,4) 
       }else{
         return null
       }
     },
     //...Autocomplete #end
-  
+
+    //...filtered Tickers #start
+    startIndex(){
+      return (this.page - 1) * 6
+    },
+    endIndex(){
+      return this.page * 6 
+    },
+    filteredTickers(){ 
+      return this.tickers.filter(elem => elem.name.includes(this.filter.toUpperCase())).reverse()
+      
+    },
+    paginatedTickers(){
+      return this.filteredTickers.slice(this.startIndex, this.endIndex)
+    },
+    hasNextPage(){
+      return this.filteredTickers.length > this.endIndex
+    },
+    //...filtered Tickers #end
+    normalizedGraph() {
+      const maxValue = Math.max(...this.graph);
+      const minValue = Math.min(...this.graph);
+      if(maxValue === minValue){
+        return this.graph.map(() => 50)
+      }
+      return this.graph.map(
+        price => 5 + ((price - minValue) * 95) / (maxValue - minValue)
+      );
+    },
+    pageStateOptions(){
+      return {
+        filter: this.filter,
+        page: this.page
+      }
+    },
   },
   
   async mounted(){
@@ -218,86 +265,82 @@ export default {
     //...loading tickers from localStorage #start
     const tickersData = localStorage.getItem('cryptonomicon-list')
     if(tickersData){
-      this.tikers = JSON.parse(tickersData)
-      this.tikers.forEach(elem => this.subscribeToUpdates(elem.name))
+      this.tickers = JSON.parse(tickersData)
+      this.tickers.forEach(elem => this.subscribeToUpdates(elem.name))
     }
     //...loading tickers from localStorage #end
   },
 
   methods: {
-    //...filtered Tikers #start
-    filteredTikers(){ 
-      const start = (this.page - 1) * 6
-      const end = this.page * 6 
-      const filteredTikers = this.tikers.filter(elem =>elem.name.includes(this.filter.toUpperCase())).reverse()
-      this.hasNextPage = filteredTikers.length > end
-      return filteredTikers.slice(start, end)
-    },
-    //...filtered Tikers #end
+    
     subscribeToUpdates(tickerName){
       setInterval(async () => {
         const f = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=5a766503f4a0184a39e3ec96e773b0a190bcb991508e1bc29e47a7803799625a`)
         const data = await f.json()
-        this.tikers.find(t => t.name === tickerName).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2)
-
-        if (this.sel?.name === tickerName) {
+        this.tickers.find(t => t.name === tickerName).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2)
+        if (this.selectedTicker?.name === tickerName) {
           this.graph.push(data.USD)
         }
-
       }, 5000)
     },
 
     add() {
-      const currentTiker = {
-        name: this.tiker,
+      const currentTicker = {
+        name: this.ticker,
         price: "Loading..."
       }
 
-      this.tikers.push(currentTiker)
+      this.tickers = [...this.tickers, currentTicker]
       this.filter = ""
-      localStorage.setItem('cryptonomicon-list', JSON.stringify(this.tikers)) //...adding tickers to localStorage 
-      this.subscribeToUpdates(currentTiker.name)
-      this.tiker = "";
+      this.subscribeToUpdates(currentTicker.name)
+      this.ticker = "";
     },
     
-    updatedDataTiker(valueTiker){
-       this.tiker = valueTiker
+    updatedDataTicker(valueTicker){
+       this.ticker = valueTicker
        this.add()
     },
 
-    remuveTiket(tik) {
-      this.tikers = this.tikers.filter(t => t !== tik);
+    handleDelete(tickerToRemove ) {
+      this.tickers = this.tickers.filter(t => t !== tickerToRemove);
+      if(this.selectedTicker === tickerToRemove){
+        this.selectedTicker = null
+      }  
+      
     },
 
-    normalizeGraph() {
-      const maxValue = Math.max(...this.graph);
-      const minValue = Math.min(...this.graph);
-      return this.graph.map(
-        price => 5 + ((price - minValue) * 95) / (maxValue - minValue)
-      );
-    },
-
-    select(tik) {
-      this.sel = tik;
-      this.graph = [];
+    select(ticker) {
+      this.selectedTicker = ticker;
     }
   },
+
   watch: {
+    tickers(){
+      localStorage.setItem('cryptonomicon-list', JSON.stringify(this.tickers)) //...adding tickers to localStorage 
+    },
+
+    selectedTicker(){
+      this.graph = [];
+    },
+
+    paginatedTickers(){
+      if(this.paginatedTickers.length === 0 && this.page > 1){
+        this.page -= 1
+      }
+    },
+
     filter(){
       this.page = 1
-      window.history.pushState(
-        null,
-        document.title,
-        `${window.location.pathname}?filter=${this.filter}`
-      )
     },
-    page(){
+    
+    pageStateOptions(value){
       window.history.pushState(
         null,
         document.title,
-        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+        `${window.location.pathname}?filter=${value.filter}&page=${value.page}`
       )
     }
+
   }
   
 }
